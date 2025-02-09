@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -12,7 +13,6 @@ import {
 } from 'chart.js';
 import './App.css';
 
-// 注册Chart.js组件
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -23,50 +23,58 @@ ChartJS.register(
   Legend
 );
 
+// 添加加密货币ID映射
+const cryptoIdMap = {
+  BTC: 'bitcoin',
+  ETH: 'ethereum',
+  BNB: 'binancecoin',
+  XRP: 'ripple',
+  USDT: 'tether',
+  USDC: 'usd-coin',
+  ADA: 'cardano',
+  DOGE: 'dogecoin',
+  DOT: 'polkadot',
+  LTC: 'litecoin'
+};
+
+// 在axios请求中添加延迟
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 const App = () => {
-  // 状态管理
   const [amount, setAmount] = useState('1');
-  const [fromCurrency, setFromCurrency] = useState('USD');
-  const [toCurrency, setToCurrency] = useState('EUR');
+  const [fromCurrency, setFromCurrency] = useState('BTC');
+  const [toCurrency, setToCurrency] = useState('USD');
   const [result, setResult] = useState(null);
   const [historicalData, setHistoricalData] = useState([]);
   const [error, setError] = useState(null);
 
-  // 替换为你的实际API密钥
-  const API_KEY = 'de1ce2113ab0865f00954d0a';
+  const YOUR_API_KEY = 'de1ce2113ab0865f00954d0a';
 
-  // 当货币对变化时自动获取历史数据
-  useEffect(() => {
-    fetchHistoricalData();
-  }, [fromCurrency, toCurrency]);
+  const cryptoCurrencies = ['BTC', 'ETH', 'USDT'];
+  const fiatCurrencies = ['USD', 'EUR', 'GBP', 'CNY', 'JPY'];
 
-  // 货币转换函数
   const convertCurrency = async () => {
     try {
-      setError(null); // 清除之前的错误
-      
-      // 输入验证
+      setError(null);
       if (!amount || isNaN(amount)) {
         throw new Error('请输入有效的金额');
       }
 
-      // 发送转换请求
-      const response = await fetch(
-        `https://v6.exchangerate-api.com/v6/${API_KEY}/pair/${fromCurrency}/${toCurrency}/${amount}`
-      );
+      let conversionResult;
+      const isFromCrypto = cryptoCurrencies.includes(fromCurrency);
+      const isToCrypto = cryptoCurrencies.includes(toCurrency);
 
-      if (!response.ok) {
-        throw new Error(`请求失败，状态码：${response.status}`);
+      if (isFromCrypto && isToCrypto) {
+        conversionResult = await convertCryptoToCrypto();
+      } else if (isFromCrypto) {
+        conversionResult = await convertCryptoToFiat();
+      } else if (isToCrypto) {
+        conversionResult = await convertFiatToCrypto();
+      } else {
+        conversionResult = await convertFiatToFiat();
       }
 
-      const data = await response.json();
-      
-      if (data.result === 'error') {
-        throw new Error(data['error-type']);
-      }
-
-      // 更新转换结果（保留两位小数）
-      setResult(data.conversion_result.toFixed(2));
+      setResult(conversionResult.toFixed(isToCrypto ? 8 : 2));
       
     } catch (err) {
       console.error('转换错误:', err);
@@ -75,31 +83,110 @@ const App = () => {
     }
   };
 
-  // 获取历史数据函数
+  const convertCryptoToFiat = async () => {
+    await delay(1000); // 添加1秒延迟避免触发API限流
+    try {
+      const cryptoId = cryptoIdMap[fromCurrency];
+      const vsCurrency = toCurrency.toLowerCase();
+      
+      const response = await axios.get(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoId}&vs_currencies=${vsCurrency}`
+      );
+  
+      // 添加数据存在性检查
+      if (!response.data[cryptoId] || !response.data[cryptoId][vsCurrency]) {
+        throw new Error('无法获取汇率数据');
+      }
+  
+      return amount * response.data[cryptoId][vsCurrency];
+    } catch (err) {
+      throw new Error(`加密货币转换失败: ${err.message}`);
+    }
+  };
+
+  const convertFiatToCrypto = async () => {
+    await delay(1000); // 添加1秒延迟避免触发API限流
+    try {
+      const cryptoId = cryptoIdMap[toCurrency];
+      const vsCurrency = fromCurrency.toLowerCase();
+      
+      const response = await axios.get(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoId}&vs_currencies=${vsCurrency}`
+      );
+  
+      if (!response.data[cryptoId] || !response.data[cryptoId][vsCurrency]) {
+        throw new Error('无法获取汇率数据');
+      }
+  
+      return amount / response.data[cryptoId][vsCurrency];
+    } catch (err) {
+      throw new Error(`法币转加密货币失败: ${err.message}`);
+    }
+  };
+
+  const convertCryptoToCrypto = async () => {
+    try {
+      // 获取原始加密货币的美元价格
+      const fromResponse = await axios.get(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoIdMap[fromCurrency]}&vs_currencies=usd`
+      );
+      const fromPriceUSD = fromResponse.data[cryptoIdMap[fromCurrency]].usd;
+      
+      // 获取目标加密货币的美元价格
+      const toResponse = await axios.get(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoIdMap[toCurrency]}&vs_currencies=usd`
+      );
+      const toPriceUSD = toResponse.data[cryptoIdMap[toCurrency]].usd;
+      
+      // 计算交叉汇率：1 FROM = (FROM_USD / TO_USD) TO
+      const conversionRate = fromPriceUSD / toPriceUSD;
+      return amount * conversionRate;
+      
+    } catch (err) {
+      throw new Error(`加密货币转换失败: ${err.message}`);
+    }
+  };
+
+  const convertFiatToFiat = async () => {
+    const response = await axios.get(
+      `https://api.exchangerate-api.com/v6/YOUR_API_KEY/pair/${fromCurrency}/${toCurrency}/${amount}`
+    );
+    return response.data.conversion_result;
+  };
+
   const fetchHistoricalData = async () => {
     try {
-      const response = await fetch(
-        `https://v6.exchangerate-api.com/v6/${API_KEY}/history/${fromCurrency}/${toCurrency}/30`
+      const response = await axios.get(
+        `https://api.coingecko.com/api/v3/coins/${fromCurrency.toLowerCase()}/market_chart?vs_currency=${toCurrency.toLowerCase()}&days=30`
       );
-      
-      const data = await response.json();
-      
-      if (data.result === 'success') {
-        // 格式化历史数据为 { date: string, rate: number } 格式
-        const formattedData = Object.entries(data.rates).map(([date, rate]) => ({
-          date,
-          rate: rate[toCurrency]
-        }));
-        setHistoricalData(formattedData);
-      }
+      setHistoricalData(response.data.prices.map(([timestamp, price]) => ({
+        date: new Date(timestamp).toLocaleDateString(),
+        price: price
+      })));
     } catch (err) {
       console.error('获取历史数据失败:', err);
     }
   };
 
+  useEffect(() => {
+    if (cryptoCurrencies.includes(fromCurrency) || cryptoCurrencies.includes(toCurrency)) {
+      fetchHistoricalData();
+    }
+  }, [fromCurrency, toCurrency]);
+
+  const renderCurrencyOptions = (currencies, label) => (
+    <optgroup label={label}>
+      {currencies.map(currency => (
+        <option key={currency} value={currency}>
+          {currency}
+        </option>
+      ))}
+    </optgroup>
+  );
+
   return (
     <div className="container">
-      <h1 className="title">货币转换器</h1>
+      <h1 className="title">数字资产转换器</h1>
 
       <div className="input-container">
         <input
@@ -116,11 +203,8 @@ const App = () => {
           value={fromCurrency}
           onChange={(e) => setFromCurrency(e.target.value)}
         >
-          <option value="USD">美元 (USD)</option>
-          <option value="EUR">欧元 (EUR)</option>
-          <option value="GBP">英镑 (GBP)</option>
-          <option value="CNY">人民币 (CNY)</option>
-          <option value="JPY">日元 (JPY)</option>
+          {renderCurrencyOptions(fiatCurrencies, '法定货币')}
+          {renderCurrencyOptions(cryptoCurrencies, '加密货币')}
         </select>
 
         <span className="conversion-arrow">→</span>
@@ -130,25 +214,17 @@ const App = () => {
           value={toCurrency}
           onChange={(e) => setToCurrency(e.target.value)}
         >
-          <option value="EUR">欧元 (EUR)</option>
-          <option value="USD">美元 (USD)</option>
-          <option value="GBP">英镑 (GBP)</option>
-          <option value="CNY">人民币 (CNY)</option>
-          <option value="JPY">日元 (JPY)</option>
+          {renderCurrencyOptions(fiatCurrencies, '法定货币')}
+          {renderCurrencyOptions(cryptoCurrencies, '加密货币')}
         </select>
 
-        <button
-          className="button"
-          onClick={convertCurrency}
-        >
+        <button className="button" onClick={convertCurrency}>
           立即转换
         </button>
       </div>
 
-      {/* 显示错误信息 */}
       {error && <div className="error-message">❌ {error}</div>}
 
-      {/* 显示转换结果 */}
       {result !== null && (
         <div className="result-box">
           <h3>转换结果：</h3>
@@ -160,16 +236,15 @@ const App = () => {
         </div>
       )}
 
-      {/* 显示历史图表 */}
       {historicalData.length > 0 && (
         <div className="chart-container">
-          <h2 className="chart-title">最近30天汇率走势</h2>
+          <h2 className="chart-title">最近30天价格走势</h2>
           <Line
             data={{
               labels: historicalData.map(item => item.date),
               datasets: [{
-                label: `${fromCurrency} 兑 ${toCurrency} 汇率`,
-                data: historicalData.map(item => item.rate),
+                label: `${fromCurrency} 价格走势`,
+                data: historicalData.map(item => item.price),
                 borderColor: '#007AFF',
                 tension: 0.2
               }]
