@@ -23,22 +23,60 @@ ChartJS.register(
   Legend
 );
 
-// 添加加密货币ID映射
+// API配置
+const API_CONFIG = {
+  coingecko: 'https://api.coingecko.com/api/v3',
+  coinpaprika: 'https://api.coinpaprika.com/v1',
+  cryptowatch: 'https://api.cryptowat.ch'
+};
+
+// 加密货币ID映射
 const cryptoIdMap = {
   BTC: 'bitcoin',
   ETH: 'ethereum',
-  BNB: 'binancecoin',
-  XRP: 'ripple',
-  USDT: 'tether',
-  USDC: 'usd-coin',
-  ADA: 'cardano',
-  DOGE: 'dogecoin',
-  DOT: 'polkadot',
-  LTC: 'litecoin'
+  USDT: 'tether'
 };
 
-// 在axios请求中添加延迟
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+// 创建带缓存的axios实例
+const apiClient = axios.create({
+  timeout: 10000,
+});
+
+// 请求缓存
+const cache = new Map();
+let lastRequestTime = 0;
+
+// 请求拦截器（限流）
+apiClient.interceptors.request.use(async (config) => {
+  const now = Date.now();
+  if (now - lastRequestTime < 1500) {
+    await new Promise(resolve => 
+      setTimeout(resolve, 1500 - (now - lastRequestTime))
+    );
+  }
+  lastRequestTime = now;
+  
+  // 检查缓存
+  const cacheKey = JSON.stringify(config);
+  if (cache.has(cacheKey)) {
+    const { expire, data } = cache.get(cacheKey);
+    if (Date.now() < expire) {
+      return { ...config, data };
+    }
+  }
+  
+  return config;
+});
+
+// 响应拦截器（缓存）
+apiClient.interceptors.response.use((response) => {
+  const cacheKey = JSON.stringify(response.config);
+  cache.set(cacheKey, {
+    data: response.data,
+    expire: Date.now() + 60000 // 缓存1分钟
+  });
+  return response;
+});
 
 const App = () => {
   const [amount, setAmount] = useState('1');
@@ -48,10 +86,81 @@ const App = () => {
   const [historicalData, setHistoricalData] = useState([]);
   const [error, setError] = useState(null);
 
-  const YOUR_API_KEY = 'de1ce2113ab0865f00954d0a';
-
   const cryptoCurrencies = ['BTC', 'ETH', 'USDT'];
   const fiatCurrencies = ['USD', 'EUR', 'GBP', 'CNY', 'JPY'];
+
+  const checkNetwork = async () => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = 'https://www.google.com/favicon.ico?' + Date.now();
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('网络连接不可用'));
+    });
+  };
+
+  const tryAPIs = async (urlPath) => {
+    const apis = [
+      `${API_CONFIG.coingecko}${urlPath}`,
+      `${API_CONFIG.coinpaprika}/tickers${urlPath}`,
+      `${API_CONFIG.cryptowat}/markets${urlPath}`
+    ];
+
+    for (const url of apis) {
+      try {
+        const response = await apiClient.get(url);
+        return response.data;
+      } catch (err) {
+        console.warn(`API请求失败: ${url}`, err.message);
+      }
+    }
+    throw new Error('所有API源均不可用');
+  };
+
+  const convertCryptoToFiat = async () => {
+    await checkNetwork();
+    const cryptoId = cryptoIdMap[fromCurrency];
+    const vsCurrency = toCurrency.toLowerCase();
+    
+    const data = await tryAPIs(`/simple/price?ids=${cryptoId}&vs_currencies=${vsCurrency}`);
+    if (!data[cryptoId]?.[vsCurrency]) {
+      throw new Error('无法获取加密货币汇率');
+    }
+    return amount * data[cryptoId][vsCurrency];
+  };
+
+  const convertFiatToCrypto = async () => {
+    await checkNetwork();
+    const cryptoId = cryptoIdMap[toCurrency];
+    const vsCurrency = fromCurrency.toLowerCase();
+    
+    const data = await tryAPIs(`/simple/price?ids=${cryptoId}&vs_currencies=${vsCurrency}`);
+    if (!data[cryptoId]?.[vsCurrency]) {
+      throw new Error('无法获取法币汇率');
+    }
+    return amount / data[cryptoId][vsCurrency];
+  };
+
+  const convertCryptoToCrypto = async () => {
+    await checkNetwork();
+    const [fromData, toData] = await Promise.all([
+      tryAPIs(`/simple/price?ids=${cryptoIdMap[fromCurrency]}&vs_currencies=usd`),
+      tryAPIs(`/simple/price?ids=${cryptoIdMap[toCurrency]}&vs_currencies=usd`)
+    ]);
+
+    const fromPrice = fromData[cryptoIdMap[fromCurrency]]?.usd;
+    const toPrice = toData[cryptoIdMap[toCurrency]]?.usd;
+    
+    if (!fromPrice || !toPrice) {
+      throw new Error('无法获取双币种汇率');
+    }
+    return amount * (fromPrice / toPrice);
+  };
+
+  const convertFiatToFiat = async () => {
+    await checkNetwork();
+    const data = await tryAPIs(`/pair/${fromCurrency}/${toCurrency}/${amount}`);
+    return data.conversion_result;
+  };
 
   const convertCurrency = async () => {
     try {
@@ -83,83 +192,10 @@ const App = () => {
     }
   };
 
-  const convertCryptoToFiat = async () => {
-    await delay(1000); // 添加1秒延迟避免触发API限流
-    try {
-      const cryptoId = cryptoIdMap[fromCurrency];
-      const vsCurrency = toCurrency.toLowerCase();
-      
-      const response = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoId}&vs_currencies=${vsCurrency}`
-      );
-  
-      // 添加数据存在性检查
-      if (!response.data[cryptoId] || !response.data[cryptoId][vsCurrency]) {
-        throw new Error('无法获取汇率数据');
-      }
-  
-      return amount * response.data[cryptoId][vsCurrency];
-    } catch (err) {
-      throw new Error(`加密货币转换失败: ${err.message}`);
-    }
-  };
-
-  const convertFiatToCrypto = async () => {
-    await delay(1000); // 添加1秒延迟避免触发API限流
-    try {
-      const cryptoId = cryptoIdMap[toCurrency];
-      const vsCurrency = fromCurrency.toLowerCase();
-      
-      const response = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoId}&vs_currencies=${vsCurrency}`
-      );
-  
-      if (!response.data[cryptoId] || !response.data[cryptoId][vsCurrency]) {
-        throw new Error('无法获取汇率数据');
-      }
-  
-      return amount / response.data[cryptoId][vsCurrency];
-    } catch (err) {
-      throw new Error(`法币转加密货币失败: ${err.message}`);
-    }
-  };
-
-  const convertCryptoToCrypto = async () => {
-    try {
-      // 获取原始加密货币的美元价格
-      const fromResponse = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoIdMap[fromCurrency]}&vs_currencies=usd`
-      );
-      const fromPriceUSD = fromResponse.data[cryptoIdMap[fromCurrency]].usd;
-      
-      // 获取目标加密货币的美元价格
-      const toResponse = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${cryptoIdMap[toCurrency]}&vs_currencies=usd`
-      );
-      const toPriceUSD = toResponse.data[cryptoIdMap[toCurrency]].usd;
-      
-      // 计算交叉汇率：1 FROM = (FROM_USD / TO_USD) TO
-      const conversionRate = fromPriceUSD / toPriceUSD;
-      return amount * conversionRate;
-      
-    } catch (err) {
-      throw new Error(`加密货币转换失败: ${err.message}`);
-    }
-  };
-
-  const convertFiatToFiat = async () => {
-    const response = await axios.get(
-      `https://api.exchangerate-api.com/v6/YOUR_API_KEY/pair/${fromCurrency}/${toCurrency}/${amount}`
-    );
-    return response.data.conversion_result;
-  };
-
   const fetchHistoricalData = async () => {
     try {
-      const response = await axios.get(
-        `https://api.coingecko.com/api/v3/coins/${fromCurrency.toLowerCase()}/market_chart?vs_currency=${toCurrency.toLowerCase()}&days=30`
-      );
-      setHistoricalData(response.data.prices.map(([timestamp, price]) => ({
+      const data = await tryAPIs(`/coins/${cryptoIdMap[fromCurrency]}/market_chart?vs_currency=${toCurrency.toLowerCase()}&days=30`);
+      setHistoricalData(data.prices.map(([timestamp, price]) => ({
         date: new Date(timestamp).toLocaleDateString(),
         price: price
       })));
