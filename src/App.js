@@ -85,6 +85,7 @@ const App = () => {
   const [result, setResult] = useState(null);
   const [historicalData, setHistoricalData] = useState([]);
   const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const cryptoCurrencies = ['BTC', 'ETH', 'USDT'];
   const fiatCurrencies = ['USD', 'EUR', 'GBP', 'CNY', 'JPY'];
@@ -165,6 +166,9 @@ const App = () => {
   const convertCurrency = async () => {
     try {
       setError(null);
+      setResult(null);
+      setIsLoading(true);
+      
       if (!amount || isNaN(amount)) {
         throw new Error('请输入有效的金额');
       }
@@ -189,6 +193,8 @@ const App = () => {
       console.error('转换错误:', err);
       setError(err.message);
       setResult(null);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -254,12 +260,22 @@ const App = () => {
           {renderCurrencyOptions(cryptoCurrencies, '加密货币')}
         </select>
 
-        <button className="button" onClick={convertCurrency}>
-          立即转换
+        <button 
+          className="button" 
+          onClick={convertCurrency}
+          disabled={isLoading}
+        >
+          {isLoading ? '转换中...' : '立即转换'}
         </button>
       </div>
 
       {error && <div className="error-message">❌ {error}</div>}
+
+      {isLoading && (
+        <div className="loader-container">
+          <div className="loader"></div>
+        </div>
+      )}
 
       {result !== null && (
         <div className="result-box">
