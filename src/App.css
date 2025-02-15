@@ -159,3 +159,19 @@ optgroup[label="加密货币"] option {
     font-size: 1.2em;
   }
 }
+
+.time-range-selector {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.time-select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background-color: white;
+  font-size: 14px;
+  cursor: pointer;
+}

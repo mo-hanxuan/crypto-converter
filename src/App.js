@@ -86,6 +86,13 @@ const App = () => {
   const [historicalData, setHistoricalData] = useState([]);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [timeRange, setTimeRange] = useState('30'); // 新增时间范围状态
+  const timeOptions = [
+    { label: '一年', value: '365' },
+    { label: '三个月', value: '90' },
+    { label: '30天', value: '30' },
+    { label: '5天', value: '5' }
+  ];
 
   const cryptoCurrencies = ['BTC', 'ETH', 'USDT'];
   const fiatCurrencies = ['USD', 'EUR', 'GBP', 'CNY', 'JPY'];
@@ -198,9 +205,10 @@ const App = () => {
     }
   };
 
+  // 或许汇率变化的历史数据
   const fetchHistoricalData = async () => {
     try {
-      const data = await tryAPIs(`/coins/${cryptoIdMap[fromCurrency]}/market_chart?vs_currency=${toCurrency.toLowerCase()}&days=30`);
+      const data = await tryAPIs(`/coins/${cryptoIdMap[fromCurrency]}/market_chart?vs_currency=${toCurrency.toLowerCase()}&days=${timeRange}`);
       setHistoricalData(data.prices.map(([timestamp, price]) => ({
         date: new Date(timestamp).toLocaleDateString(),
         price: price
@@ -214,7 +222,7 @@ const App = () => {
     if (cryptoCurrencies.includes(fromCurrency) || cryptoCurrencies.includes(toCurrency)) {
       fetchHistoricalData();
     }
-  }, [fromCurrency, toCurrency]);
+  }, [fromCurrency, toCurrency, timeRange]); // 添加timeRange依赖
 
   const renderCurrencyOptions = (currencies, label) => (
     <optgroup label={label}>
@@ -290,7 +298,22 @@ const App = () => {
 
       {historicalData.length > 0 && (
         <div className="chart-container">
-          <h2 className="chart-title">最近30天价格走势</h2>
+          <div className="time-range-selector">
+            <h2 className="chart-title">
+              最近{timeOptions.find(opt => opt.value === timeRange)?.label}价格走势
+            </h2>
+            <select
+              className="time-select"
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+            >
+              {timeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <Line
             data={{
               labels: historicalData.map(item => item.date),
