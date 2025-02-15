@@ -34,7 +34,10 @@ const API_CONFIG = {
 const cryptoIdMap = {
   BTC: 'bitcoin',
   ETH: 'ethereum',
-  USDT: 'tether'
+  USDT: 'tether',
+  LTC: 'litecoin',
+  DOGE: 'dogecoin',
+  TRUMP: 'official-trump'
 };
 
 // 创建带缓存的axios实例
@@ -94,7 +97,7 @@ const App = () => {
     { label: '5天', value: '5' }
   ];
 
-  const cryptoCurrencies = ['BTC', 'ETH', 'USDT'];
+  const cryptoCurrencies = ['BTC', 'ETH', 'USDT', 'LTC', 'DOGE', 'TRUMP'];
   const fiatCurrencies = ['USD', 'EUR', 'GBP', 'CNY', 'JPY'];
 
   const checkNetwork = async () => {
