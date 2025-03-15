@@ -175,3 +175,85 @@ optgroup[label="加密货币"] option {
   font-size: 14px;
   cursor: pointer;
 }
+
+.chart-loader-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  margin-top: 20px;
+}
+
+.chart-loader-container p {
+  margin-top: 15px;
+  color: #666;
+  font-size: 16px;
+}
+
+.no-data-message {
+  background: #f8f9fa;
+  padding: 20px 25px;
+  border-radius: 10px;
+  margin: 30px 0;
+  text-align: center;
+  border-left: 5px solid #6c757d;
+}
+
+.no-data-message p {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.no-data-message .subtext {
+  font-weight: 500;
+  margin-top: 15px;
+  color: #555;
+}
+
+.no-data-message ul {
+  list-style-type: disc;
+  padding-left: 20px;
+  margin: 10px 0;
+  text-align: left;
+  display: inline-block;
+}
+
+.no-data-message li {
+  margin: 5px 0;
+  color: #555;
+}
+
+.warning-icon {
+  font-size: 18px;
+  margin-right: 8px;
+  display: inline-block;
+}
+
+.info-icon {
+  font-size: 18px;
+  margin-right: 8px;
+  color: #17a2b8;
+  display: inline-block;
+}
+
+.no-data-message.error {
+  border-left-color: #dc3545;
+  background-color: #fff8f8;
+}
+
+.retry-button {
+  margin-top: 15px;
+  padding: 8px 20px;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.retry-button:hover {
+  background-color: #5a6268;
+}
