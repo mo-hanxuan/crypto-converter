@@ -1,7 +1,7 @@
 # Digital Asset Converter
 
 A modern React application that allows conversion between various types of financial assets, including:
-- Fiat currencies (USD, EUR, JPY, etc.)
+- Fiat currencies (USD, CNY, EUR, JPY, etc.)
 - Digital currencies/cryptocurrencies (BTC, ETH, etc.)
 - Cross-conversions between different digital currencies
 
@@ -29,7 +29,7 @@ This tool provides real-time exchange rates and a user-friendly interface to qui
 1. Clone the repository:
    ```bash
    git clone https://github.com/yourusername/currency-converter.git
-   cd currency-converter
+   cd crypto-converter
    ```
 
 2. Install dependencies:
